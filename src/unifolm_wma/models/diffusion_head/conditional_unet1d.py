@@ -2,6 +2,7 @@ import logging
 import torch
 import torch.nn as nn
 import einops
+import aiter
 
 from einops import rearrange, repeat
 from typing import Union
@@ -91,11 +92,13 @@ class CrossAttention(nn.Module):
             (q, k, v),
         )
         # actually compute the attention, what we cannot get enough of
-        out = xformers.ops.memory_efficient_attention(q,
-                                                      k,
-                                                      v,
-                                                      attn_bias=None,
-                                                      op=None)
+        # out = xformers.ops.memory_efficient_attention(q,
+        #                                               k,
+        #                                               v,
+        #                                               attn_bias=None,
+        #                                               op=None)
+
+        out = aiter.flash_attn_func(q, k, v)
         out = (out.unsqueeze(0).reshape(
             b, self.heads, out.shape[1],
             self.dim_head).permute(0, 2, 1,

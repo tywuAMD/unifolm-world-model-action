@@ -10,6 +10,7 @@ try:
     import xformers.ops
     XFORMERS_IS_AVAILBLE = True
 except:
+    import aiter
     XFORMERS_IS_AVAILBLE = False
 
 from unifolm_wma.utils.common import (
@@ -87,8 +88,8 @@ class CrossAttention(nn.Module):
                 num_units=dim_head, max_relative_position=temporal_length)
         else:
             ## only used for spatial attention, while NOT for temporal attention
-            if XFORMERS_IS_AVAILBLE and temporal_length is None:
-                self.forward = self.efficient_forward
+            #if XFORMERS_IS_AVAILBLE and temporal_length is None:
+            self.forward = self.efficient_forward
 
         self.video_length = video_length
         self.image_cross_attention = image_cross_attention
@@ -292,11 +293,14 @@ class CrossAttention(nn.Module):
                         b * self.heads, t.shape[1], self.dim_head).contiguous(),
                 (k, v),
             )
-            out = xformers.ops.memory_efficient_attention(q,
-                                                          k,
-                                                          v,
-                                                          attn_bias=None,
-                                                          op=None)
+            if XFORMERS_IS_AVAILBLE:
+                out = xformers.ops.memory_efficient_attention(q,
+                                                              k,
+                                                              v,
+                                                              attn_bias=None,
+                                                              op=None)
+            else:
+                out = aiter.flash_attn_func(q, k, v)
             out = (out.unsqueeze(0).reshape(
                 b, self.heads, out.shape[1],
                 self.dim_head).permute(0, 2, 1,
@@ -312,11 +316,14 @@ class CrossAttention(nn.Module):
                         ),
                 (k_ip, v_ip),
             )
-            out_ip = xformers.ops.memory_efficient_attention(q,
-                                                             k_ip,
-                                                             v_ip,
-                                                             attn_bias=None,
-                                                             op=None)
+            if XFORMERS_IS_AVAILBLE:
+                out_ip = xformers.ops.memory_efficient_attention(q,
+                                                                 k_ip,
+                                                                 v_ip,
+                                                                 attn_bias=None,
+                                                                 op=None)
+            else:
+                out_ip = aiter.flash_attn_func(q, k_ip, v_ip)
             out_ip = (out_ip.unsqueeze(0).reshape(
                 b, self.heads, out_ip.shape[1],
                 self.dim_head).permute(0, 2, 1,
@@ -332,11 +339,14 @@ class CrossAttention(nn.Module):
                         ),
                 (k_as, v_as),
             )
-            out_as = xformers.ops.memory_efficient_attention(q,
-                                                             k_as,
-                                                             v_as,
-                                                             attn_bias=None,
-                                                             op=None)
+            if XFORMERS_IS_AVAILBLE:
+                out_as = xformers.ops.memory_efficient_attention(q,
+                                                                k_as,
+                                                                 v_as,
+                                                                 attn_bias=None,
+                                                                 op=None)
+            else:
+                out_as = aiter.flash_attn_func(q, k_as, v_as)
             out_as = (out_as.unsqueeze(0).reshape(
                 b, self.heads, out_as.shape[1],
                 self.dim_head).permute(0, 2, 1,
@@ -356,8 +366,12 @@ class CrossAttention(nn.Module):
                     b * self.heads, attn_mask_aa.shape[1], attn_mask_aa.shape[2])
             attn_mask_aa = attn_mask_aa.to(q.dtype)
 
-            out_aa = xformers.ops.memory_efficient_attention(
+            
+            if XFORMERS_IS_AVAILBLE:
+                out_aa = xformers.ops.memory_efficient_attention(
                 q, k_aa, v_aa, attn_bias=attn_mask_aa, op=None)
+            else:
+                out_aa = aiter.flash_attn_func(q, k_aa, v_aa, attn_bias=attn_mask_aa)
 
             out_aa = (out_aa.unsqueeze(0).reshape(
                 b, self.heads, out_aa.shape[1],
